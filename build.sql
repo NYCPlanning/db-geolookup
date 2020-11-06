@@ -89,7 +89,7 @@ SELECT
 	a.ctcb2010, 
 	st_intersects(a.centroid_geom, b.geom)::int as park_access
 INTO geo_lookups.in_park_access
-FROM cd_bctcb2010_centroids a, (
+FROM geo_lookups.cd_bctcb2010_centroids a, (
 	SELECT st_union(wkb_geometry) as geom
 	FROM  dpr_access_zone.latest
 	) b;
