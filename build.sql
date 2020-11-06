@@ -57,57 +57,31 @@ SELECT *
     FROM fema_firms2007_100yr.latest
     WHERE fld_zone <> 'X') a;
 
---  Create a single geometry for each floodplain
-SELECT *
-INTO geo_lookups.floodplain_geoms
-FROM 
-(SELECT 
-	'500-year' as flood_type,
-	ST_MakeValid(ST_Union(wkb_geometry)) as geom
-FROM geo_lookups.combined_floodzones
-UNION
-SELECT
-	'100-year' as flood_type,
-	ST_MakeValid(ST_Union(wkb_geometry)) as geom
-FROM geo_lookups.combined_floodzones
-WHERE fld_zone <> '0.2 PCT ANNUAL CHANCE FLOOD HAZARD') b;
-	
- 
+	 
 -- Compute 500-year floodplain flag   
 SELECT 
 	a.borocode,
-	a.boro,
-	a.county,
-	a.county_fips,
 	a.ctcb2010,
-	a.ctcbg2010,
-	a.ct2010,
-	a.nta,
-	a.nta_name,
-	a.puma,
-	a.puma_name,
-	a.puma_roughcd_equiv,
-	a.councildst,
-	a.commntydst,
-	st_intersects(a.centroid_geom, b.geom)::int as fp_500
+	(SUM(st_intersects(a.centroid_geom, b.geom)::int) > 0)::int as fp_500
 INTO geo_lookups.in_500
 FROM geo_lookups.cd_bctcb2010_centroids a, (
-			SELECT geom as geom
-			FROM geo_lookups.floodplain_geoms
-			WHERE flood_type = '500-year'
-			) b;
+			SELECT wkb_geometry as geom
+			FROM geo_lookups.combined_floodzones
+			) b
+GROUP BY a.borocode, a.ctcb2010;
 
 -- Compute 100-year floodplain flag  
 SELECT 
 	a.borocode,
 	a.ctcb2010, 
-	st_intersects(a.centroid_geom, b.geom)::int as fp_100
+	(SUM(st_intersects(a.centroid_geom, b.geom)::int) > 0)::int as fp_100
 INTO geo_lookups.in_100
 FROM geo_lookups.cd_bctcb2010_centroids a, (
-	SELECT geom as geom
-			FROM geo_lookups.floodplain_geoms
-			WHERE flood_type = '100-year'
-	) b;
+	SELECT wkb_geometry as geom
+	FROM geo_lookups.combined_floodzones
+	WHERE fld_zone <> '0.2 PCT ANNUAL CHANCE FLOOD HAZARD'
+	) b
+GROUP BY a.borocode, a.ctcb2010;
 
 -- Compute walk-to-park access zone flag
 SELECT 
@@ -127,7 +101,30 @@ WITH flood_join AS (
 	JOIN geo_lookups.in_100 b
 	ON a.borocode||a.ctcb2010 = b.borocode||b.ctcb2010)
 SELECT a.*, b.park_access
-	INTO geo_lookups.geo_lookup
+	INTO geo_lookups.flags
 	FROM flood_join a
 	JOIN geo_lookups.in_park_access b
 	ON a.borocode||a.ctcb2010 = b.borocode||b.ctcb2010;
+	
+-- Create large geo lookup table
+SELECT a.borocode,
+	a.boro,
+	a.county,
+	a.county_fips,
+	a.ctcb2010,
+	a.ctcbg2010,
+	a.ct2010,
+	a.nta,
+	a.nta_name,
+	a.puma,
+	a.puma_name,
+	a.puma_roughcd_equiv,
+	a.councildst,
+	a.commntydst,
+	b.fp_100,
+	b.fp_500,
+	b.park_access
+INTO geo_lookups.geo_lookup
+FROM geo_lookups.cd_bctcb2010_centroids a
+JOIN geo_lookups.flags b
+ON a.borocode||a.ctcb2010 = b.borocode||b.ctcb2010;
