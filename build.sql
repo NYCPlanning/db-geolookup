@@ -41,62 +41,47 @@ SELECT
         JOIN dcp_censusblocks.latest b
         ON a.bctcb2010 = b.bctcb2010;
  
--- Combine FIRM and PFIRM records, excluding X zones       
-SELECT *
-	INTO geo_lookups.combined_floodzones
-	FROM
-	(SELECT
-		(CASE
-			WHEN fld_zone <> '0.2 PCT ANNUAL CHANCE FLOOD HAZARD' THEN 1
-			ELSE 0
-		END) AS fp_100,
-		1 AS fp_500,
-		fld_zone, 
-		wkb_geometry 
-	FROM fema_pfirms2015_100yr.latest
-	WHERE fld_zone <> 'X'
-    UNION 
-    SELECT 
-    	(CASE
-			WHEN fld_zone <> '0.2 PCT ANNUAL CHANCE FLOOD HAZARD' THEN 1
-			ELSE 0
-		END) AS fp_100,
-		1 AS fp_500,
-    	fld_zone, 
-    	wkb_geometry 
-    FROM fema_firms2007_100yr.latest
-    WHERE fld_zone <> 'X') a;
+-- Create a single 500-year flood polygon from combined FIRM and PFIRM records
+SELECT ST_Union(wkb_geometry) as wkb_geometry
+INTO geo_lookups.flood_500
+FROM ( 
+	SELECT ST_Union(wkb_geometry) as wkb_geometry 
+	FROM fema_pfirms2015_100yr.latest 
+	WHERE fld_zone <> 'X' 
+	UNION 
+	SELECT ST_Union(wkb_geometry) as wkb_geometry 
+	FROM fema_firms2007_100yr.latest 
+	WHERE fld_zone <> 'X' ) a
+;
 
+-- Create a single 100-year flood polygon from combined FIRM and PFIRM records
+SELECT ST_Union(wkb_geometry) as wkb_geometry
+INTO geo_lookups.flood_100
+FROM ( 
+	SELECT ST_Union(wkb_geometry) as wkb_geometry 
+	FROM fema_pfirms2015_100yr.latest 
+	WHERE fld_zone <> 'X' AND fld_zone <> '0.2 PCT ANNUAL CHANCE FLOOD HAZARD'
+	UNION 
+	SELECT ST_Union(wkb_geometry) as wkb_geometry 
+	FROM fema_firms2007_100yr.latest 
+	WHERE fld_zone <> 'X' AND fld_zone <> '0.2 PCT ANNUAL CHANCE FLOOD HAZARD') a
+;
 	 
 -- Compute 500-year floodplain flag   
 SELECT 
 	a.borocode,
 	a.ctcb2010,
-	ST_Intersects(a.centroid_geom, b.geom)::int as fp_500
+	ST_Intersects(a.centroid_geom, b.wkb_geometry)::int as fp_500
 INTO geo_lookups.in_500
-FROM geo_lookups.cd_bctcb2010_centroids a, (
-	SELECT 
-		ST_Union(ST_MakeValid(wkb_geometry)) as geom
-	FROM geo_lookups.combined_floodzones
-	WHERE fp_500 = 1
-	GROUP BY fp_500
-	) b
-;
+FROM geo_lookups.cd_bctcb2010_centroids a, geo_lookups.flood_500 b;
 
 -- Compute 100-year floodplain flag  
 SELECT 
 	a.borocode,
 	a.ctcb2010, 
-	ST_Intersects(a.centroid_geom, b.geom)::int as fp_100
+	ST_Intersects(a.centroid_geom, b.wkb_geometry)::int as fp_100
 INTO geo_lookups.in_100
-FROM geo_lookups.cd_bctcb2010_centroids a, (
-	SELECT 
-		ST_Union(ST_MakeValid(wkb_geometry)) as geom
-	FROM geo_lookups.combined_floodzones
-	WHERE fp_100 = 1
-	GROUP BY fp_100
-	) b
-;
+FROM geo_lookups.cd_bctcb2010_centroids a, geo_lookups.flood_100 b;
 
 -- Compute walk-to-park access zone flag
 SELECT 
