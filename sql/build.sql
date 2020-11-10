@@ -34,7 +34,7 @@ SELECT
         puma_name,
         puma_roughcd_equiv,
         cncld_2013 as councildst,
-        cd as commntydst,
+        cd,
         ST_Centroid(b.wkb_geometry) as centroid_geom
         INTO geo_lookups.cd_bctcb2010_centroids
         FROM dcp_bctcb2010_cd_puma a
@@ -120,7 +120,7 @@ SELECT a.borocode,
 	a.puma_name,
 	a.puma_roughcd_equiv,
 	a.councildst,
-	a.commntydst,
+	a.cd,
 	b.fp_100,
 	b.fp_500,
 	b.park_access
