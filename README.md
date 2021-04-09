@@ -1,2 +1,2 @@
 # db-geolookup
-For creating geospatial relationship lookup files
+For creating geospatial relationship lookup files.
